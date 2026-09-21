@@ -3,6 +3,7 @@ import { getSupabase } from "../supabase/client";
 import type { Permit } from "../types";
 import { firmKey } from "./firm";
 import { contactOutCompany, contactOutContact } from "./providers/contactout";
+import { floridaGovCompany, floridaGovContact, lookupIndividual } from "./providers/fl-gov";
 import { rocketReachCompany, rocketReachContact } from "./providers/rocketreach";
 import { shovelsCompany, shovelsContact } from "./providers/shovels-employees";
 import type { EnrichmentResult, ResolvedContact } from "./types";
@@ -52,10 +53,12 @@ function buildDeps(): WaterfallDeps {
   const db = getSupabase();
 
   return {
-    // Cheapest first. Shovels is construction-native and ~$0.02/record;
-    // ContactOut next; RocketReach last on cost and measured hit rate.
-    companyProviders: [shovelsCompany, contactOutCompany, rocketReachCompany],
-    contactProviders: [shovelsContact, contactOutContact, rocketReachContact],
+    // Free public records first: DBPR licence data and Orlando business tax
+    // receipts cost nothing, carry no resale restriction, and cover exactly
+    // the segment the paid vendors are worst at - small FL contractors.
+    // Then cheapest-paid first.
+    companyProviders: [floridaGovCompany, shovelsCompany, contactOutCompany, rocketReachCompany],
+    contactProviders: [floridaGovContact, shovelsContact, contactOutContact, rocketReachContact],
 
     async readCache(key) {
       if (!db) return null;
@@ -121,8 +124,17 @@ export interface EnrichPermitOptions {
 }
 
 export async function enrichPermit(permit: Permit, opts: EnrichPermitOptions = {}): Promise<EnrichmentResult> {
+  // The developer is who we sell; fall back to the contractor only if no
+  // owner is named. Mirrors resolveTarget in lib/lead.ts.
   const firmName = permit.owner?.company ?? permit.owner?.name
     ?? permit.contractor?.company ?? permit.contractor?.name ?? null;
+
+  // An individual applicant has no company to resolve, but Florida publishes
+  // their licence phone. Try that before the waterfall spends anything.
+  let seed = seedContactFromPermit(permit);
+  if (!seed && firmName && permit.geo.state === "FL") {
+    seed = await lookupIndividual(firmName).catch(() => null);
+  }
 
   return runWaterfall(
     {
@@ -130,7 +142,7 @@ export async function enrichPermit(permit: Permit, opts: EnrichPermitOptions = {
       firmName,
       city: permit.geo.city,
       state: permit.geo.state,
-      seedContact: seedContactFromPermit(permit),
+      seedContact: seed,
       creditBudget: opts.creditBudget ?? 4,
       signal: opts.signal,
     },

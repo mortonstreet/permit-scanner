@@ -9,3 +9,6 @@ next-env.d.ts
 /test-results/
 .vercel
 .env*
+
+# Bulk government extracts, downloaded by scripts/sunbiz-fetch.py
+.data/
