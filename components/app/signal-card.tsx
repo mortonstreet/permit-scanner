@@ -104,6 +104,17 @@ export function SignalCard({ signal, query }: { signal: Signal; query: string })
             )}
           </div>
 
+          {signal.also_filed && signal.also_filed.length > 0 && (
+            <p className="mt-1.5 text-[13px] text-primary">
+              + {signal.also_filed.length} more permit{signal.also_filed.length > 1 ? "s" : ""} from this firm
+              {signal.also_filed.some((f) => f.value != null) && (
+                <span className="text-foreground-secondary">
+                  {" "}({formatUsd(signal.also_filed.reduce((sum, f) => sum + (f.value ?? 0), 0))} combined)
+                </span>
+              )}
+            </p>
+          )}
+
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {signal.job.tags.slice(0, 3).map((t) => (
               <span key={t} className={cn(

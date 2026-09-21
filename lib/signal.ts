@@ -9,6 +9,12 @@ import type { Permit } from "./types";
 
 export interface Signal {
   permit_id: string;
+  /**
+   * Other permits the same firm filed in this window. A developer pulling five
+   * permits is one phone call, not five, and the cluster is itself a buying
+   * signal - it says they are actively building, not doing a one-off.
+   */
+  also_filed?: Array<{ permit_id: string; address: string | null; value: number | null; posted: string }>;
   score: number;
   band: "hot" | "warm" | "cool";
   reasons: string[];
@@ -73,15 +79,59 @@ export interface SignalQuery {
   limit: number;
 }
 
-/** Filter to GC-actionable, score, drop below the floor, rank. */
+/**
+ * Filter to GC-actionable, score, drop below the floor, cluster by firm, rank.
+ *
+ * Clustering matters for the product, not just the display: the unit of work
+ * for a salesperson is a conversation with a firm, and five permits from one
+ * developer is one conversation with a stronger opening.
+ */
 export function rankSignals(permits: Permit[], now: Date, q: SignalQuery): Signal[] {
-  return permits
+  const scored = permits
     .filter(isActionableForGc)
     .map((p) => buildSignal(p, now))
     .filter((s) => s.score >= q.minScore)
     .filter((s) =>
       q.stage === "all" ||
       (q.stage === "pre_permit" && s.stage === "pre_permit") ||
-      (q.stage === "pre_issuance" && s.stage !== "issued"))
-    .sort((a, b) => b.score - a.score || (a.days_old ?? 999) - (b.days_old ?? 999));
+      (q.stage === "pre_issuance" && s.stage !== "issued"));
+
+  // Group by firm, keeping the highest-scoring permit as the one to lead with.
+  const byFirm = new Map<string, Signal[]>();
+  for (const s of scored) {
+    const key = s.target ? firmClusterKey(s.target.name) : s.permit_id;
+    const bucket = byFirm.get(key);
+    if (bucket) bucket.push(s);
+    else byFirm.set(key, [s]);
+  }
+
+  const clustered: Signal[] = [];
+  for (const group of byFirm.values()) {
+    group.sort((a, b) => b.score - a.score || (b.job.value ?? 0) - (a.job.value ?? 0));
+    const [lead, ...rest] = group;
+    clustered.push({
+      ...lead,
+      // A firm filing repeatedly is worth a nudge up the list, capped so it
+      // cannot outrank genuine freshness.
+      score: Math.min(100, lead.score + Math.min(rest.length * 2, 6)),
+      also_filed: rest.slice(0, 5).map((s) => ({
+        permit_id: s.permit_id,
+        address: s.where.address,
+        value: s.job.value,
+        posted: s.posted,
+      })),
+    });
+  }
+
+  return clustered.sort((a, b) => b.score - a.score || (a.days_old ?? 999) - (b.days_old ?? 999));
+}
+
+/** Loose firm key: lowercase, strip punctuation and legal suffixes. */
+function firmClusterKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[.,'"()]/g, " ")
+    .replace(/\b(llc|l l c|inc|incorporated|corp|corporation|co|company|ltd|lp|llp|pa|pllc)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

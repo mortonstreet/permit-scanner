@@ -1,0 +1,13 @@
+# The Railway service runs the ingestion worker, not the web app.
+# It is a scheduled one-shot: pull a rolling window, upsert, exit.
+[phases.setup]
+nixPkgs = ["nodejs_22", "pnpm"]
+
+[phases.install]
+cmds = ["pnpm install --frozen-lockfile --prod=false"]
+
+[phases.build]
+cmds = ["echo 'worker: no build step required'"]
+
+[start]
+cmd = "pnpm ingest --days 3"
