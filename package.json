@@ -19,7 +19,8 @@
     "sources:probe": "tsx --tsconfig tsconfig.scripts.json scripts/probe-sources.ts",
     "test:rls": "./scripts/test-rls.sh",
     "db:reset": "supabase db reset",
-    "digest": "tsx --tsconfig tsconfig.scripts.json worker/digest.ts"
+    "digest": "tsx --tsconfig tsconfig.scripts.json worker/digest.ts",
+    "gov:build-index": "tsx --tsconfig tsconfig.scripts.json scripts/build-gov-index.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

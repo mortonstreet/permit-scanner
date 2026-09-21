@@ -57,6 +57,18 @@ export async function GET(request: Request) {
       cached_indexes: indexStatus(),
     });
   } catch (err) {
-    return fail("upstream_failed", err instanceof Error ? err.message : "Government lookup failed");
+    const message = err instanceof Error ? err.message : "Government lookup failed";
+    // DBPR blocks datacenter egress, so this path fails on Vercel while
+    // working locally. Report it as a known, recoverable condition rather
+    // than a generic upstream error.
+    if (message.includes("403")) {
+      return ok({
+        available: false,
+        reason: "DBPR blocks datacenter IPs; this index only builds from an allowed network.",
+        remedy: "Run `pnpm gov:build-index` and commit the artifact, or build it from the Railway worker.",
+        cached_indexes: indexStatus(),
+      });
+    }
+    return fail("upstream_failed", message);
   }
 }

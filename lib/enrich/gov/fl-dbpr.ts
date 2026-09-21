@@ -1,4 +1,7 @@
 import "server-only";
+import { readFile } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
+import path from "node:path";
 import { normalizePhone, parseCsv } from "./csv";
 import { fetchText, getIndex } from "./index-store";
 
@@ -89,7 +92,62 @@ function splitQualifier(raw: string): { first: string | null; last: string | nul
   return { first, last };
 }
 
+/** Shape written by scripts/build-gov-index.ts. Tuples, not objects, to keep it small. */
+interface PrebuiltIndex {
+  built_at: string;
+  counts: { applicants: number; withPhone: number; firms: number };
+  people: Record<string, [string, string, string | null, string | null, string | null]>;
+  firms: Record<string, [string, string | null, string | null, string | null, string | null, string | null]>;
+  byLicence: Record<string, string>;
+}
+
+/**
+ * Load the pre-built artifact if it is present.
+ *
+ * DBPR blocks datacenter IPs, so the deployed app cannot fetch the CSVs at
+ * runtime. `pnpm gov:build-index` produces this file from an allowed network
+ * and it ships with the deployment.
+ */
+async function loadPrebuilt(): Promise<DbprIndex | null> {
+  try {
+    const file = path.join(process.cwd(), "data", "fl-dbpr-index.json.gz");
+    const raw = await readFile(file);
+    const parsed = JSON.parse(gunzipSync(raw).toString("utf8")) as PrebuiltIndex;
+
+    const peopleByName = new Map<string, DbprPerson>();
+    for (const [key, t] of Object.entries(parsed.people)) {
+      peopleByName.set(key, { firstName: t[0], lastName: t[1], phone: t[2], city: t[3], licenseType: t[4] });
+    }
+
+    const firmsByName = new Map<string, DbprFirm>();
+    for (const [key, t] of Object.entries(parsed.firms)) {
+      firmsByName.set(key, {
+        firmName: t[0], qualifierRaw: [t[2], t[1]].filter(Boolean).join(", "),
+        qualifierFirst: t[1], qualifierLast: t[2],
+        licenseNumber: t[3], status: t[4], city: t[5],
+      });
+    }
+
+    const firmsByLicense = new Map<string, DbprFirm>();
+    for (const [licence, firmKey] of Object.entries(parsed.byLicence)) {
+      const firm = firmsByName.get(firmKey);
+      if (firm) firmsByLicense.set(licence, firm);
+    }
+
+    return {
+      peopleByName, firmsByName, firmsByLicense,
+      counts: { ...parsed.counts, licences: firmsByLicense.size },
+    };
+  } catch {
+    // No artifact, or it is unreadable: fall through to the live fetch.
+    return null;
+  }
+}
+
 async function buildIndex(): Promise<DbprIndex> {
+  const prebuilt = await loadPrebuilt();
+  if (prebuilt) return prebuilt;
+
   const [applicantsCsv, licencesCsv] = await Promise.all([
     fetchText(APPLICANTS_URL, { label: "DBPR applicants", timeoutMs: 120_000 }),
     fetchText(LICENCES_URL, { label: "DBPR licences", timeoutMs: 180_000 }),
