@@ -10,12 +10,40 @@ import type { SourceAdapter } from "./types";
  * same thing regardless of which jurisdictions happened to answer.
  */
 
-/** How many rows to pull per source before local filtering trims them down. */
+/**
+ * How many rows to pull per source before local filtering trims them down.
+ *
+ * Sources sort newest-first, so the window we pull is the freshest slice - which
+ * is the right slice for this product. The floor is deliberately high: a low cap
+ * makes a wide date range return *fewer* rows than a narrow one, because each
+ * source truncates before the date filter has done any work.
+ */
 function overFetchBudget(filters: SearchFilters, sourceCount: number): number {
   const needed = filters.page * filters.size;
   // Local filtering can discard a lot, so pull a multiple of what we display.
-  const perSource = Math.ceil((needed * 4) / Math.max(sourceCount, 1));
-  return Math.min(Math.max(perSource, 100), 1000);
+  const perSource = Math.ceil((needed * 6) / Math.max(sourceCount, 1));
+  return Math.min(Math.max(perSource, 500), 1000);
+}
+
+/**
+ * Which filters the aggregator had to apply itself rather than push upstream.
+ *
+ * When this is empty, the sum of the sources' own counts is the true total and
+ * we can report it exactly. When it is not, the locally filtered count is only
+ * a floor over the slice we pulled.
+ */
+function localOnlyFilters(filters: SearchFilters, adapters: SourceAdapter[]): boolean {
+  if (filters.permit_tags?.length || filters.permit_tags_exclude?.length) return true;
+  if (filters.permit_status?.length) return true;
+  if (filters.property_type?.length) return true;
+  if (filters.contractor_name || filters.legal_owner) return true;
+  if (filters.permit_max_job_value != null) return true;
+  if (filters.property_min_unit_count != null || filters.property_max_unit_count != null) return true;
+  if (filters.property_min_year_built != null || filters.property_max_year_built != null) return true;
+  // A keyword or value filter is only pushed down by sources that can express it.
+  if (filters.permit_q && adapters.some((a) => !a.descriptor.capabilities.textSearch)) return true;
+  if (filters.permit_min_job_value != null && adapters.some((a) => !a.descriptor.capabilities.jobValue)) return true;
+  return false;
 }
 
 export function matchesLocally(permit: Permit, f: SearchFilters): boolean {
@@ -119,18 +147,25 @@ export async function aggregateSearch({ filters, adapters, signal }: AggregateOp
   );
 
   const collected: Permit[] = [];
-  let sawUpstreamTotal = false;
+  let upstreamTotal = 0;
+  let everySourceCounted = true;
+  let anySourceTruncated = false;
 
   settled.forEach((result, i) => {
     const adapter = active[i];
     if (result.status === "rejected") {
       const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
       warnings.push(`${adapter.descriptor.label} is unavailable: ${reason}`);
+      everySourceCounted = false;
       return;
     }
     collected.push(...result.value.permits);
     warnings.push(...result.value.warnings);
-    if (result.value.total != null) sawUpstreamTotal = true;
+
+    if (result.value.total != null) upstreamTotal += result.value.total;
+    else everySourceCounted = false;
+    // A source that filled its budget certainly had more to give.
+    if (result.value.permits.length >= limit) anySourceTruncated = true;
   });
 
   const filtered = dedupe(collected).filter((p) => matchesLocally(p, filters));
@@ -139,14 +174,30 @@ export async function aggregateSearch({ filters, adapters, signal }: AggregateOp
   const start = (filters.page - 1) * filters.size;
   const items = sorted.slice(start, start + filters.size);
 
-  // We only ever see the rows we over-fetched, so a full page at the boundary
-  // means there are probably more upstream than we counted.
-  const hitBudget = collected.length >= limit * active.length;
+  /*
+   * Reporting the count honestly.
+   *
+   * If every source gave us its own count and we applied no filter it could not
+   * express, that sum is the real total - even though we only pulled the
+   * freshest slice of it. Otherwise the locally filtered count is a floor, and
+   * we say so rather than presenting it as exact.
+   */
+  const filteredLocally = localOnlyFilters(filters, active);
+  const canTrustUpstream = everySourceCounted && !filteredLocally && upstreamTotal > 0;
+
+  const total = canTrustUpstream ? Math.max(upstreamTotal, sorted.length) : sorted.length;
+  const isEstimate = canTrustUpstream ? false : anySourceTruncated;
+
+  if (anySourceTruncated && !canTrustUpstream) {
+    warnings.push(
+      "More permits match than we could pull in one pass. These are the most recent; narrow the area or the date range for a complete count.",
+    );
+  }
 
   return {
     items,
-    total: sorted.length,
-    total_is_estimate: hitBudget || sawUpstreamTotal,
+    total,
+    total_is_estimate: isEstimate,
     page: filters.page,
     size: filters.size,
     warnings: [...new Set(warnings)],

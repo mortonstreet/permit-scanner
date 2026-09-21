@@ -130,3 +130,36 @@ describe("freshnessLabel", () => {
     expect(freshnessLabel(permit({ file_date: null, issue_date: null }), now)).toBe("—");
   });
 });
+
+describe("aggregateSearch count semantics", () => {
+  const filters = searchFiltersSchema.parse({ geo_state: "FL", size: "10" });
+
+  function countingAdapter(id: string, permits: Permit[], total: number): SourceAdapter {
+    const base = stubAdapter(id, permits);
+    return { ...base, async fetch() { return { permits, total, warnings: [] }; } };
+  }
+
+  it("reports the sources' own total exactly when nothing was filtered locally", async () => {
+    const rows = Array.from({ length: 5 }, (_, i) => permit({ permit_number: `P-${i}`, address: `${i} Main St` }));
+    const result = await aggregateSearch({ filters, adapters: [countingAdapter("a", rows, 4_200)] });
+    expect(result.total).toBe(4_200);
+    expect(result.total_is_estimate).toBe(false);
+  });
+
+  it("falls back to a floor when a filter had to be applied locally", async () => {
+    const rows = Array.from({ length: 5 }, (_, i) =>
+      permit({ permit_number: `P-${i}`, address: `${i} Main St`, tags: i < 2 ? ["excavation"] : ["roofing"] }));
+    const result = await aggregateSearch({
+      filters: searchFiltersSchema.parse({ geo_state: "FL", size: "10", permit_tags: "excavation" }),
+      adapters: [countingAdapter("a", rows, 4_200)],
+    });
+    // Only the rows that actually matched, not the upstream 4,200.
+    expect(result.total).toBe(2);
+  });
+
+  it("never reports a total below the rows it is showing", async () => {
+    const rows = Array.from({ length: 5 }, (_, i) => permit({ permit_number: `P-${i}`, address: `${i} Main St` }));
+    const result = await aggregateSearch({ filters, adapters: [countingAdapter("a", rows, 1)] });
+    expect(result.total).toBeGreaterThanOrEqual(result.items.length);
+  });
+});

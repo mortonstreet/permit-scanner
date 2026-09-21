@@ -71,6 +71,7 @@ export function SearchApp() {
           tab={tab}
           onTabChange={(next) => commitNow({ tab: next === "permits" ? "" : next })}
           counts={counts}
+          countIsEstimate={data?.total_is_estimate ?? false}
           mapOpen={mapOpen}
           onToggleMap={() => setMapOpen((v) => !v)}
         />

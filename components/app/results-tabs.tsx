@@ -14,6 +14,8 @@ interface ResultsTabsProps {
   tab: ResultTab;
   onTabChange: (tab: ResultTab) => void;
   counts: Partial<Record<ResultTab, number | null>>;
+  /** True when the permit count is a floor rather than an exact figure. */
+  countIsEstimate?: boolean;
   mapOpen: boolean;
   onToggleMap: () => void;
 }
@@ -24,7 +26,7 @@ const TABS: Array<{ id: ResultTab; label: string }> = [
   { id: "properties", label: "Properties" },
 ];
 
-export function ResultsTabs({ tab, onTabChange, counts, mapOpen, onToggleMap }: ResultsTabsProps) {
+export function ResultsTabs({ tab, onTabChange, counts, countIsEstimate = false, mapOpen, onToggleMap }: ResultsTabsProps) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-border px-5">
       <div role="tablist" aria-label="Result type" className="flex items-center gap-1">
@@ -51,7 +53,7 @@ export function ResultsTabs({ tab, onTabChange, counts, mapOpen, onToggleMap }: 
                   selected ? "bg-background-selected text-primary" : "bg-background-subtle text-foreground-muted",
                 )}
               >
-                {count == null ? "—" : formatCount(count)}
+                {count == null ? "—" : formatCount(count, id === "permits" && countIsEstimate)}
               </span>
               {selected && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-primary" />}
             </button>
@@ -91,8 +93,8 @@ function ToolButton({ icon, label, onClick }: { icon: React.ReactNode; label: st
   );
 }
 
-/** 10,000+ rather than an exact number once we hit the counting ceiling. */
-function formatCount(n: number): string {
+/** A "+" marks a floor: either the counting ceiling or a truncated fetch. */
+function formatCount(n: number, isEstimate = false): string {
   if (n >= 10_000) return "10,000+";
-  return n.toLocaleString("en-US");
+  return n.toLocaleString("en-US") + (isEstimate ? "+" : "");
 }

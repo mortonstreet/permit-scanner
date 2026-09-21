@@ -13,7 +13,7 @@ export function Pagination({
   return (
     <nav className="mt-4 flex items-center justify-between gap-4" aria-label="Results pages">
       <p className="text-[13px] text-foreground-secondary">
-        {first.toLocaleString()}–{last.toLocaleString()} of {isEstimate && "about "}
+        {first.toLocaleString()}–{last.toLocaleString()} of {isEstimate && "at least "}
         {total.toLocaleString()}
       </p>
       <div className="flex items-center gap-1">
