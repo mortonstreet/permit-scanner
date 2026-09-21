@@ -1,0 +1,10 @@
+# Bulk government extracts fetched by scripts/sunbiz-fetch.py.
+# Gigabytes, rebuilt on demand, and never needed by the deployed app.
+.data/
+
+node_modules
+.next
+test-results
+*.log
+supabase/.branches
+supabase/.temp

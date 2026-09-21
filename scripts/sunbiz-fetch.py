@@ -15,7 +15,7 @@ resources", so this reads single-threaded in modest chunks.
 import sys, os, time, paramiko
 
 HOST, USER, PW = "sftp.floridados.gov", "Public", "PubAccess1845!"
-OUT = os.path.expanduser("~/permit-scanner/.data")
+OUT = os.environ.get("SUNBIZ_DATA_DIR") or os.path.expanduser("~/.permit-stack-data")
 
 CHUNK = 32 << 10        # the server drops larger sustained reads
 MAX_ATTEMPTS = 40
