@@ -126,9 +126,15 @@ export interface AggregateOptions {
   filters: SearchFilters;
   adapters: SourceAdapter[];
   signal?: AbortSignal;
+  /**
+   * Return this many merged rows instead of one page. Used by the signals
+   * endpoint, which has to score the whole candidate set before ranking it -
+   * paginating first would rank only an arbitrary slice.
+   */
+  poolSize?: number;
 }
 
-export async function aggregateSearch({ filters, adapters, signal }: AggregateOptions): Promise<SearchResponse> {
+export async function aggregateSearch({ filters, adapters, signal, poolSize }: AggregateOptions): Promise<SearchResponse> {
   const active = adapters.filter((a) => a.matches(filters));
   const warnings: string[] = [];
 
@@ -140,7 +146,9 @@ export async function aggregateSearch({ filters, adapters, signal }: AggregateOp
     };
   }
 
-  const limit = overFetchBudget(filters, active.length);
+  const limit = poolSize
+    ? Math.min(Math.max(Math.ceil((poolSize * 3) / active.length), 500), 1000)
+    : overFetchBudget(filters, active.length);
 
   const settled = await Promise.allSettled(
     active.map((adapter) => adapter.fetch({ filters, limit, signal })),
@@ -171,8 +179,8 @@ export async function aggregateSearch({ filters, adapters, signal }: AggregateOp
   const filtered = dedupe(collected).filter((p) => matchesLocally(p, filters));
   const sorted = sortPermits(filtered, filters.sort);
 
-  const start = (filters.page - 1) * filters.size;
-  const items = sorted.slice(start, start + filters.size);
+  const start = poolSize ? 0 : (filters.page - 1) * filters.size;
+  const items = poolSize ? sorted.slice(0, poolSize) : sorted.slice(start, start + filters.size);
 
   /*
    * Reporting the count honestly.

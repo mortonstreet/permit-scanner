@@ -1,16 +1,18 @@
-import { NextResponse } from "next/server";
 import { getContainer } from "@/lib/container";
+import { ok } from "@/lib/api/respond";
 
-/** GET /api/sources - first-party alias of /api/v1/sources. */
+export const dynamic = "force-dynamic";
+
+/** GET /api/v1/sources - the feed registry, with freshness expectations. */
 export async function GET() {
   const c = getContainer();
-  return NextResponse.json({
-    sources: c.catalog.all().map((a) => ({
+  return ok(
+    c.catalog.all().map((a) => ({
       ...a.descriptor,
       archival: c.catalog.isArchival(a.descriptor.id),
       configured: a.descriptor.requiresCredential
         ? Boolean(process.env[a.descriptor.requiresCredential])
         : true,
     })),
-  });
+  );
 }

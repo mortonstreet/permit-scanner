@@ -1,23 +1,11 @@
 import { NextResponse } from "next/server";
-import { cachePermits, getCachedPermit } from "@/lib/cache";
-import { getPermitById } from "@/lib/supabase/permits";
-import { configuredProviders, enrichPermit } from "@/lib/enrich";
+import { getContainer } from "@/lib/container";
 import type { Permit } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/**
- * POST /api/enrich  { permit_id } or { permit }
- *
- * Resolves the firm named on a permit to a reachable decision maker. Every
- * provider call costs credits, so this only ever runs on explicit user intent,
- * never while rendering a result list.
- *
- * Callers may post the whole permit rather than an id. The client already holds
- * it, and that avoids depending on a server-side cache that does not survive a
- * restart or a cold serverless instance.
- */
+/** POST /api/enrich - first-party alias of /api/v1/enrich. */
 export async function POST(request: Request) {
   let body: { permit_id?: string; permit?: Permit };
   try {
@@ -26,13 +14,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Expected a JSON body with permit_id or permit." }, { status: 400 });
   }
 
+  const c = getContainer();
   let permit: Permit | null = body.permit ?? null;
-  if (permit) {
-    // Keep it around so the detail page and a repeat reveal are both cheap.
-    cachePermits([permit]);
-  } else if (body.permit_id) {
-    permit = getCachedPermit(body.permit_id) ?? (await getPermitById(body.permit_id));
-  }
+  if (permit) c.cache.put([permit]);
+  else if (body.permit_id) permit = await c.search.getById(body.permit_id);
 
   if (!permit) {
     return NextResponse.json(
@@ -42,20 +27,21 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await enrichPermit(permit, { signal: request.signal });
-
-    if (!result.contact && configuredProviders().length === 0) {
+    const result = await c.enrichment.enrich(permit, { signal: request.signal });
+    if (!result.contact && c.enrichment.configuredProviders().length === 0) {
       return NextResponse.json({
         ...result,
         notes: [
           ...result.notes,
-          "No enrichment provider is configured. Set SHOVELS_API_KEY, CONTACTOUT_API_KEY or ROCKETREACH_API_KEY to resolve contacts beyond what the permit itself publishes.",
+          "No enrichment provider is configured. Set SHOVELS_API_KEY, CONTACTOUT_API_KEY or ROCKETREACH_API_KEY.",
         ],
       });
     }
     return NextResponse.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Enrichment failed";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Enrichment failed" },
+      { status: 502 },
+    );
   }
 }

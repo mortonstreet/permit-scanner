@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.19.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev -p 3210",
     "build": "next build",
@@ -12,9 +14,11 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run tests/unit",
-    "db:push": "tsx --tsconfig tsconfig.scripts.json scripts/db-push.ts",
+    "db:push": "supabase db push",
     "ingest": "tsx --tsconfig tsconfig.scripts.json worker/ingest.ts",
-    "sources:probe": "tsx --tsconfig tsconfig.scripts.json scripts/probe-sources.ts"
+    "sources:probe": "tsx --tsconfig tsconfig.scripts.json scripts/probe-sources.ts",
+    "test:rls": "./scripts/test-rls.sh",
+    "db:reset": "supabase db reset"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
@@ -49,5 +53,11 @@
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
   },
-  "pnpm": { "onlyBuiltDependencies": ["esbuild", "unrs-resolver", "sharp"] }
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "unrs-resolver",
+      "sharp"
+    ]
+  }
 }
