@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Download, Info } from "lucide-react";
+import { ChevronLeft, Download, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber, formatUsd } from "@/lib/utils";
@@ -11,6 +11,8 @@ import type { Permit } from "@/lib/types";
 import { toCsv, downloadCsv } from "@/lib/csv";
 import { StatusBadge, TagChip } from "./status-badge";
 import { PermitTimeline } from "./permit-timeline";
+import { SourceFields } from "./source-fields";
+import { CopyButton } from "./copy-button";
 import { LeadPanel } from "./lead-panel";
 
 /** Full-page permit record: the drill-down from "View full detail". */
@@ -70,6 +72,7 @@ export function PermitProfile({ permitId }: { permitId: string }) {
           <h1 className="font-mono text-2xl font-semibold tracking-tight text-foreground">
             {permit.permit_number ?? "Unnumbered permit"}
           </h1>
+          <CopyButton value={permit.permit_number ?? permit.id} label="Copy permit number" className="size-8" />
           <button
             type="button"
             aria-label="Download this permit as CSV"
@@ -133,24 +136,7 @@ export function PermitProfile({ permitId }: { permitId: string }) {
 
         <LeadPanel permit={permit} />
 
-        <details className="group rounded-xl border border-border bg-background-secondary">
-          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3.5 text-sm text-foreground-secondary transition-colors hover:text-foreground">
-            <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden />
-            View all source fields
-          </summary>
-          <div className="border-t border-border px-4 py-3">
-            <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-              {Object.entries(permit.source_fields)
-                .filter(([, v]) => v != null && v !== "")
-                .map(([key, value]) => (
-                  <div key={key} className="min-w-0">
-                    <dt className="text-[11px] font-semibold tracking-wide text-foreground-muted">{key}</dt>
-                    <dd className="truncate font-mono text-[13px] text-foreground">{String(value)}</dd>
-                  </div>
-                ))}
-            </dl>
-          </div>
-        </details>
+        <SourceFields fields={permit.source_fields} />
 
         {notReported.length > 0 && (
           <div className="rounded-xl border border-dashed border-border px-4 py-3">
@@ -168,7 +154,7 @@ export function PermitProfile({ permitId }: { permitId: string }) {
 function BackLink({ query }: { query: string }) {
   return (
     <Button variant="outline" size="sm" asChild>
-      <Link href={query ? `/?${query}` : "/"}><ChevronLeft className="size-4" /> Back to results</Link>
+      <Link href={query ? `/search?${query}` : "/"}><ChevronLeft className="size-4" /> Back to results</Link>
     </Button>
   );
 }

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Permit } from "@/lib/types";
 import type { EnrichmentResult } from "@/lib/enrich/types";
+import { competingContractor, resolveTarget } from "@/lib/lead";
 
 /**
  * Turns a permit into a contactable lead.
@@ -19,7 +20,11 @@ export function LeadPanel({ permit }: { permit: Permit }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const firm = permit.owner?.company ?? permit.contractor?.company ?? null;
+  // The party we sell: the developer who controls the job, not whoever is
+  // already building it.
+  const target = resolveTarget(permit);
+  const competitor = competingContractor(permit);
+  const firm = target?.name ?? null;
 
   async function reveal() {
     setLoading(true);
@@ -60,23 +65,33 @@ export function LeadPanel({ permit }: { permit: Permit }) {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <p className="label-caps mb-1.5">Firm</p>
+          <p className="label-caps mb-1.5">
+            {target?.role === "gc" ? "Contractor (job already placed)" : "Developer"}
+          </p>
           {firm ? (
-            <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-              <Building2 className="size-3.5 shrink-0 text-foreground-muted" aria-hidden />
-              {firm}
-            </p>
+            <>
+              <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <Building2 className="size-3.5 shrink-0 text-foreground-muted" aria-hidden />
+                {firm}
+              </p>
+              <p className="mt-1 text-[13px] text-foreground-secondary">{target?.reason}</p>
+            </>
           ) : (
             <p className="text-sm text-foreground-muted">
-              This jurisdiction did not name a firm on the permit.
+              This jurisdiction did not name a party on the permit.
             </p>
           )}
-          {permit.owner?.company && permit.contractor?.company &&
-            permit.owner.company !== permit.contractor.company && (
-              <p className="mt-1 text-[13px] text-foreground-secondary">
-                Contractor of record: {permit.contractor.company}
-              </p>
-            )}
+
+          {competitor ? (
+            <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-warning-border bg-warning-light px-2.5 py-1.5 text-[13px] text-warning-text">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span><strong>{competitor}</strong> is already the contractor of record. This job is placed.</span>
+            </p>
+          ) : firm ? (
+            <p className="mt-2 rounded-lg border border-success/25 bg-success-light px-2.5 py-1.5 text-[13px] text-success-text">
+              No contractor of record yet - the trade package is still open.
+            </p>
+          ) : null}
         </div>
 
         <div>

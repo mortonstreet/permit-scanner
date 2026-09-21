@@ -91,7 +91,7 @@ export function SignalsBoard() {
   function update(key: string, value: string) {
     const next = new URLSearchParams(params.toString());
     next.set(key, value);
-    router.push(`/signals?${next.toString()}`, { scroll: false });
+    router.push(`/?${next.toString()}`, { scroll: false });
   }
 
   const signals = payload?.data ?? [];
@@ -116,7 +116,7 @@ export function SignalsBoard() {
             </p>
           </div>
           <Button variant="outline" asChild>
-            <Link href={`/?${searchQuery}`}>
+            <Link href={`/search?${searchQuery}`}>
               <Search className="size-4" /> Full permit search
             </Link>
           </Button>

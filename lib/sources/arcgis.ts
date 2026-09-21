@@ -1,5 +1,6 @@
 import type { SearchFilters } from "../filters";
 import { buildPermit, inferTags, normalizePropertyType, normalizeStatus, parseDate, parseLatLng, parseMoney, titleCase } from "../normalize";
+import { isOrganization, normalizePersonName, titleizeOrg } from "../names";
 import type { Permit } from "../types";
 import { type FetchArgs, type FetchResult, type SourceAdapter, type SourceDescriptor, fetchJson } from "./types";
 
@@ -30,6 +31,11 @@ export interface ArcGisFieldMap {
   contractor_license?: string;
   owner_name?: string;
   owner_company?: string;
+  /** Some feeds split the applicant across two columns (Manatee, Accela). */
+  owner_first_name?: string;
+  owner_last_name?: string;
+  contractor_first_name?: string;
+  contractor_last_name?: string;
   property_type?: string;
   units?: string;
   year_built?: string;
@@ -132,9 +138,18 @@ export function createArcGisAdapter(config: ArcGisConfig): SourceAdapter {
     const permitType = str(a, fields.permit_type);
     const statusRaw = str(a, fields.status);
     const contractorCompany = str(a, fields.contractor_company);
-    const contractorName = str(a, fields.contractor_name);
+    // Prefer split columns when the feed has them; they are unambiguous.
+    const contractorName = normalizePersonName({
+      first: str(a, fields.contractor_first_name),
+      last: str(a, fields.contractor_last_name),
+      full: str(a, fields.contractor_name),
+    });
     const ownerCompany = str(a, fields.owner_company);
-    const ownerName = str(a, fields.owner_name);
+    const ownerName = normalizePersonName({
+      first: str(a, fields.owner_first_name),
+      last: str(a, fields.owner_last_name),
+      full: str(a, fields.owner_name),
+    });
 
     return buildPermit({
       source_id: descriptor.id,
@@ -161,16 +176,20 @@ export function createArcGisAdapter(config: ArcGisConfig): SourceAdapter {
       issue_date: parseDate(a[fields.issue_date ?? ""] ?? null),
       final_date: parseDate(a[fields.final_date ?? ""] ?? null),
       contractor: contractorCompany || contractorName ? {
-        name: titleCase(contractorName),
-        company: titleCase(contractorCompany) ?? titleCase(contractorName),
+        name: contractorName,
+        // A person's name is not a company name; only promote it when it
+        // actually reads like an entity.
+        company: contractorCompany ? titleizeOrg(contractorCompany)
+          : contractorName && isOrganization(contractorName) ? contractorName : null,
         license: str(a, fields.contractor_license),
         phone: null, email: null, address: null,
       } : null,
       // Prefer the filing company; fall back to the individual applicant, since
       // many filings are made by an owner-operator under their own name.
       owner: ownerCompany || ownerName ? {
-        name: titleCase(ownerName),
-        company: titleCase(ownerCompany) ?? titleCase(ownerName),
+        name: ownerName,
+        company: ownerCompany ? titleizeOrg(ownerCompany)
+          : ownerName && isOrganization(ownerName) ? ownerName : null,
         license: null, phone: null, email: null, address: null,
       } : null,
       property: {

@@ -1,5 +1,6 @@
 import type { SearchFilters } from "../filters";
 import { buildPermit, inferTags, normalizePropertyType, normalizeStatus, parseDate, parseLatLng, parseMoney, titleCase } from "../normalize";
+import { isOrganization, normalizePersonName, titleizeOrg } from "../names";
 import type { Permit } from "../types";
 import { type FetchArgs, type FetchResult, type SourceAdapter, type SourceDescriptor, fetchJson } from "./types";
 
@@ -149,8 +150,8 @@ export function createSocrataAdapter(config: SocrataConfig): SourceAdapter {
     }
 
     const contractorCompany = str(row, fields.contractor_company);
-    const contractorName = str(row, fields.contractor_name);
-    const ownerName = str(row, fields.owner_name);
+    const contractorName = normalizePersonName({ full: str(row, fields.contractor_name) });
+    const ownerName = normalizePersonName({ full: str(row, fields.owner_name) });
 
     return buildPermit({
       source_id: descriptor.id,
@@ -176,15 +177,17 @@ export function createSocrataAdapter(config: SocrataConfig): SourceAdapter {
       issue_date: parseDate(str(row, fields.issue_date)),
       final_date: parseDate(str(row, fields.final_date)),
       contractor: contractorCompany || contractorName ? {
-        name: titleCase(contractorName),
-        company: titleCase(contractorCompany) ?? titleCase(contractorName),
+        name: contractorName,
+        company: contractorCompany ? titleizeOrg(contractorCompany)
+          : contractorName && isOrganization(contractorName) ? contractorName : null,
         license: str(row, fields.contractor_license),
         phone: str(row, fields.contractor_phone),
         email: null,
         address: null,
       } : null,
       owner: ownerName ? {
-        name: titleCase(ownerName), company: titleCase(ownerName),
+        name: ownerName,
+        company: isOrganization(ownerName) ? ownerName : null,
         license: null, phone: null, email: null, address: null,
       } : null,
       property: {

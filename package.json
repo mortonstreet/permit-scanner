@@ -18,7 +18,8 @@
     "ingest": "tsx --tsconfig tsconfig.scripts.json worker/ingest.ts",
     "sources:probe": "tsx --tsconfig tsconfig.scripts.json scripts/probe-sources.ts",
     "test:rls": "./scripts/test-rls.sh",
-    "db:reset": "supabase db reset"
+    "db:reset": "supabase db reset",
+    "digest": "tsx --tsconfig tsconfig.scripts.json worker/digest.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
@@ -33,6 +34,7 @@
     "radix-ui": "^1.6.7",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "resend": "^6.28.1",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.5.4"

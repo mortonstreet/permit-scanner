@@ -1,7 +1,7 @@
 import { getContainer } from "@/lib/container";
 import { authorize, fail, isFirstParty, ok } from "@/lib/api/respond";
 import { parseFilters, type SearchFilters } from "@/lib/filters";
-import { isActionableForGc } from "@/lib/lead";
+import { isActionableForGc, isOpenOpportunity } from "@/lib/lead";
 import { rankSignals } from "@/lib/signal";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +23,7 @@ export const maxDuration = 60;
  *   window      days back to look (default 7, max 90)
  *   min_score   drop leads below this score (default 40)
  *   stage       all | pre_permit | pre_issuance   (default all)
+ *   open_only   exclude permits that already name a contractor (default true)
  */
 export async function GET(request: Request) {
   const auth = authorize(request);
@@ -34,6 +35,9 @@ export async function GET(request: Request) {
   const window = clamp(Number.parseInt(params.get("window") ?? "7", 10) || 7, 1, 90);
   const minScore = clamp(Number.parseInt(params.get("min_score") ?? "40", 10) || 0, 0, 100);
   const stage = params.get("stage") ?? "all";
+  // Default to open jobs only: a permit that already names a contractor is a
+  // lagging indicator, and selling it to a GC wastes their call.
+  const openOnly = (params.get("open_only") ?? "true") !== "false";
   const limit = clamp(Number.parseInt(params.get("limit") ?? "50", 10) || 50, 1, 200);
 
   // Default the date range from `window` unless the caller set one explicitly.
@@ -62,6 +66,7 @@ export async function GET(request: Request) {
       minScore,
       stage: stage as "all" | "pre_permit" | "pre_issuance",
       limit,
+      openOnly,
     });
 
     const signals = scored.slice(0, limit);
@@ -70,6 +75,7 @@ export async function GET(request: Request) {
       window_days: window,
       min_score: minScore,
       stage,
+      open_only: openOnly,
       scanned: result.items.length,
       actionable: scored.length,
       returned: signals.length,
@@ -77,6 +83,7 @@ export async function GET(request: Request) {
       funnel: {
         permits_scanned: result.items.length,
         gc_actionable: result.items.filter(isActionableForGc).length,
+        open_jobs: result.items.filter(isOpenOpportunity).length,
         above_min_score: scored.length,
       },
       sources: result.sources.filter((s) => !s.archival).map((s) => s.label),

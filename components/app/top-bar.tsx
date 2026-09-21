@@ -7,8 +7,8 @@ import { BRAND, BRAND_TITLE } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/signals", label: "Call list" },
-  { href: "/", label: "Permit search" },
+  { href: "/", label: "Call list" },
+  { href: "/search", label: "Permit search" },
 ];
 
 /** Global header: wordmark, primary nav, account. */
@@ -18,7 +18,7 @@ export function TopBar() {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-5">
       <div className="flex items-center gap-7">
-        <Link href="/signals" className="flex items-center gap-2" aria-label={`${BRAND_TITLE} home`}>
+        <Link href="/" className="flex items-center gap-2" aria-label={`${BRAND_TITLE} home`}>
           <span className="flex size-7 items-center justify-center rounded-md bg-primary">
             <ShovelMark />
           </span>

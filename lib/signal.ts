@@ -1,4 +1,4 @@
-import { isActionableForGc, resolveDeveloper, resolveTarget, scoreBand, scoreLead } from "./lead";
+import { competingContractor, isActionableForGc, resolveTarget, scoreBand, scoreLead } from "./lead";
 import { freshnessLabel } from "./sources/aggregate";
 import type { Permit } from "./types";
 
@@ -21,8 +21,13 @@ export interface Signal {
   stage: "pre_permit" | "pre_issuance" | "issued";
   days_old: number | null;
   posted: string;
-  target: { name: string; role: string; why: string } | null;
-  developer: string | null;
+  target: { name: string; role: string; why: string; is_company: boolean } | null;
+  /** The contractor already on the job. Non-null means someone else won it. */
+  competing_contractor: string | null;
+  /** True when no contractor of record is on the filing - still winnable. */
+  open: boolean;
+  /** Reasons this lead is weaker than its score suggests. */
+  warnings: string[];
   contact_on_permit: { phone: string | null; email: string | null };
   job: { description: string | null; permit_type: string | null; tags: string[]; value: number | null };
   where: {
@@ -46,8 +51,12 @@ export function buildSignal(permit: Permit, now: Date): Signal {
     stage: s.prePermit ? "pre_permit" : s.preIssuance ? "pre_issuance" : "issued",
     days_old: s.daysOld,
     posted: freshnessLabel(permit, now),
-    target: target ? { name: target.name, role: target.role, why: target.reason } : null,
-    developer: resolveDeveloper(permit),
+    target: target
+      ? { name: target.name, role: target.role, why: target.reason, is_company: target.isCompany }
+      : null,
+    competing_contractor: competingContractor(permit),
+    open: s.open,
+    warnings: s.warnings,
     contact_on_permit: {
       phone: permit.contractor?.phone ?? permit.owner?.phone ?? null,
       email: permit.contractor?.email ?? permit.owner?.email ?? null,
@@ -77,6 +86,8 @@ export interface SignalQuery {
   minScore: number;
   stage: "all" | "pre_permit" | "pre_issuance";
   limit: number;
+  /** Drop permits that already name a contractor. Default view for a GC. */
+  openOnly: boolean;
 }
 
 /**
@@ -90,6 +101,7 @@ export function rankSignals(permits: Permit[], now: Date, q: SignalQuery): Signa
   const scored = permits
     .filter(isActionableForGc)
     .map((p) => buildSignal(p, now))
+    .filter((s) => (q.openOnly ? s.open : true))
     .filter((s) => s.score >= q.minScore)
     .filter((s) =>
       q.stage === "all" ||

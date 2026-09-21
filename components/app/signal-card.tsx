@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Building2, Clock, MapPin, Phone, Zap } from "lucide-react";
+import { ArrowRight, Building2, Clock, MapPin, Phone, TriangleAlert, Zap } from "lucide-react";
 import { cn, formatUsd, humanizeTag } from "@/lib/utils";
 import { tagPalette } from "@/lib/reference-data";
 import type { Signal } from "@/lib/signal";
+import { CopyButton } from "./copy-button";
 
 /**
  * One lead on the call list.
@@ -25,6 +26,19 @@ const SCORE_STYLES = {
   warm: "bg-warning-light text-warning-text border border-warning-border",
   cool: "bg-background-subtle text-foreground-secondary",
 } as const;
+
+const ROLE_LABELS: Record<string, string> = {
+  owner_builder: "Developer",
+  developer: "Developer",
+  gc: "GC (job placed)",
+};
+
+const ROLE_STYLES: Record<string, string> = {
+  // The developer on an unplaced job is the lead we actually sell.
+  owner_builder: "bg-primary text-foreground-inverted",
+  developer: "bg-primary-light text-primary",
+  gc: "bg-background-subtle text-foreground-muted",
+};
 
 const STAGE_LABELS: Record<Signal["stage"], string> = {
   pre_permit: "Pre-permit",
@@ -58,11 +72,14 @@ export function SignalCard({ signal, query }: { signal: Signal; query: string })
             {signal.target && (
               <span className={cn(
                 "rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-                signal.target.role === "gc"
-                  ? "bg-primary-light text-primary"
-                  : "bg-background-subtle text-foreground-secondary",
+                ROLE_STYLES[signal.target.role] ?? "bg-background-subtle text-foreground-secondary",
               )}>
-                {signal.target.role === "gc" ? "GC" : "Developer"}
+                {ROLE_LABELS[signal.target.role] ?? signal.target.role}
+              </span>
+            )}
+            {signal.open && (
+              <span className="rounded-full bg-success-light px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success-text">
+                Open
               </span>
             )}
             {signal.contact_on_permit.phone && (
@@ -76,9 +93,10 @@ export function SignalCard({ signal, query }: { signal: Signal; query: string })
             )}
           </div>
 
-          {signal.developer && (
-            <p className="mt-0.5 text-[13px] text-foreground-secondary">
-              Developer: {signal.developer}
+          {signal.competing_contractor && (
+            <p className="mt-1 flex items-center gap-1.5 text-[13px] text-warning-text">
+              <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
+              {signal.competing_contractor} already has this job
             </p>
           )}
 
@@ -129,16 +147,24 @@ export function SignalCard({ signal, query }: { signal: Signal; query: string })
                 {r}
               </span>
             ))}
+            {signal.warnings?.slice(0, 1).map((w) => (
+              <span key={w} className="rounded-full border border-warning-border bg-warning-light px-2 py-0.5 text-[11px] text-warning-text">
+                {w}
+              </span>
+            ))}
           </div>
         </div>
 
-        <Link
-          href={href}
-          className="shrink-0 self-center rounded-lg border border-border bg-background-secondary p-2 text-foreground-secondary transition-colors hover:border-border-hover hover:text-primary"
-          aria-label={`Open permit ${signal.permit_number ?? signal.permit_id}`}
-        >
-          <ArrowRight className="size-4" />
-        </Link>
+        <div className="flex shrink-0 flex-col items-center gap-1 self-center">
+          <Link
+            href={href}
+            className="rounded-lg border border-border bg-background-secondary p-2 text-foreground-secondary transition-colors hover:border-border-hover hover:text-primary"
+            aria-label={`Open permit ${signal.permit_number ?? signal.permit_id}`}
+          >
+            <ArrowRight className="size-4" />
+          </Link>
+          <CopyButton value={signal.permit_number ?? signal.permit_id} label="Copy permit number" />
+        </div>
       </div>
     </li>
   );
