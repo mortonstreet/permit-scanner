@@ -66,6 +66,11 @@ export interface Permit {
   id: string;
   /** Registry key of the source adapter that produced this row. */
   source_id: string;
+  /**
+   * Where in the project lifecycle this record sits. Set from the source that
+   * produced it; see ProjectStage for the measured windows.
+   */
+  stage: "entitlement" | "pre_permit" | "permit_review" | "issued";
 
   permit_number: string | null;
   status: PermitStatus;

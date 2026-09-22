@@ -185,6 +185,7 @@ export function buildPermit(input: Partial<Permit> & Pick<Permit, "source_id">):
   return {
     id: input.id ?? permitId(input.source_id, permit_number, address),
     source_id: input.source_id,
+    stage: input.stage ?? "issued",
     permit_number,
     status: input.status ?? "unknown",
     status_raw: input.status_raw ?? null,

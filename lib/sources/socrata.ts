@@ -160,6 +160,7 @@ export function createSocrataAdapter(config: SocrataConfig): SourceAdapter {
 
     return buildPermit({
       source_id: descriptor.id,
+      stage: descriptor.stage ?? "issued",
       permit_number: str(row, fields.permit_number),
       status: normalizeStatus(statusRaw),
       status_raw: statusRaw,

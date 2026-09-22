@@ -126,6 +126,7 @@ export function createShovelsAdapter(config: ShovelsConfig = {}): SourceAdapter 
     return buildPermit({
       id: `shovels:${p.id}`,
       source_id: descriptor.id,
+      stage: descriptor.stage ?? "issued",
       permit_number: p.number ?? null,
       status: p.status ? (SHOVELS_STATUS[p.status] ?? normalizeStatus(p.status)) : "unknown",
       status_raw: p.status ?? null,

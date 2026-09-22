@@ -36,6 +36,8 @@ export interface ArcGisFieldMap {
   /** Some feeds split the applicant across two columns (Manatee, Accela). */
   owner_first_name?: string;
   owner_last_name?: string;
+  owner_email?: string;
+  owner_phone?: string;
   contractor_first_name?: string;
   contractor_last_name?: string;
   property_type?: string;
@@ -159,6 +161,7 @@ export function createArcGisAdapter(config: ArcGisConfig): SourceAdapter {
 
     return buildPermit({
       source_id: descriptor.id,
+      stage: descriptor.stage ?? "issued",
       permit_number: str(a, fields.permit_number),
       status: normalizeStatus(statusRaw),
       status_raw: statusRaw,
@@ -193,11 +196,14 @@ export function createArcGisAdapter(config: ArcGisConfig): SourceAdapter {
       } : null,
       // Prefer the filing company; fall back to the individual applicant, since
       // many filings are made by an owner-operator under their own name.
-      owner: ownerCompany || ownerName ? {
+      owner: ownerCompany || ownerName || str(a, fields.owner_email) ? {
         name: ownerName,
         company: ownerCompany ? titleizeOrg(ownerCompany)
           : ownerName && isOrganization(ownerName) ? ownerName : null,
-        license: null, phone: null, email: null, address: null,
+        license: null,
+        phone: str(a, fields.owner_phone),
+        email: str(a, fields.owner_email)?.toLowerCase() ?? null,
+        address: null,
       } : null,
       property: {
         property_type: normalizePropertyType(str(a, fields.property_type) ?? permitType ?? description),

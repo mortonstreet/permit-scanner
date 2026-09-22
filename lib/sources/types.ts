@@ -12,6 +12,22 @@ import type { SearchFilters } from "../filters";
 
 export type SourcePlatform = "socrata" | "arcgis" | "apify" | "shovels" | "static";
 
+/**
+ * Where in a project's life this source's records appear.
+ *
+ * This is the single most important property of a source, because it decides
+ * whether a record is a lead or a history entry. Measured windows:
+ *
+ *   entitlement    site plan submitted -> approved: ~170 days median (Raleigh)
+ *   pre_permit     environmental or grading filing, ahead of the build permit
+ *   permit_review  permit applied -> issued: 28 days Raleigh, 2 days Orlando
+ *   issued         the contractor is engaged; this is history
+ *
+ * The entitlement window is roughly sixty times the permit-review window in a
+ * fast-permitting city. A product built on issued permits is selling history.
+ */
+export type ProjectStage = "entitlement" | "pre_permit" | "permit_review" | "issued";
+
 export interface SourceCapabilities {
   /** Can the upstream filter by a date range server-side? */
   dateRange: boolean;
@@ -43,6 +59,13 @@ export interface SourceDescriptor {
   jurisdiction: string;
   /** Roughly how often the upstream refreshes, for the freshness badge. */
   cadence: "realtime" | "daily" | "weekly" | "monthly" | "unknown";
+  /**
+   * The earliest stage this source's records represent. Defaults to "issued",
+   * because most permit feeds publish issued permits and that is the safe
+   * assumption - claiming a source is early when it is not would be the
+   * expensive mistake.
+   */
+  stage?: ProjectStage;
   capabilities: SourceCapabilities;
   /** Set when the source needs a key we may not have configured. */
   requiresCredential?: string;

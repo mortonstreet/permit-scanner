@@ -18,7 +18,8 @@ export interface Signal {
   score: number;
   band: "hot" | "warm" | "cool";
   reasons: string[];
-  stage: "pre_permit" | "pre_issuance" | "issued";
+  /** Where in the project lifecycle this sits. Drives how early the lead is. */
+  stage: "entitlement" | "pre_permit" | "pre_issuance" | "issued";
   days_old: number | null;
   posted: string;
   target: { name: string; role: string; why: string; is_company: boolean } | null;
@@ -64,7 +65,9 @@ export function buildSignal(permit: Permit, now: Date): Signal {
     score: s.score,
     band: scoreBand(s.score),
     reasons: s.reasons,
-    stage: s.prePermit ? "pre_permit" : s.preIssuance ? "pre_issuance" : "issued",
+    stage: permit.stage === "entitlement" ? "entitlement"
+      : permit.stage === "pre_permit" ? "pre_permit"
+      : s.preIssuance ? "pre_issuance" : "issued",
     days_old: s.daysOld,
     posted: freshnessLabel(permit, now),
     target: target
@@ -100,7 +103,7 @@ export function buildSignal(permit: Permit, now: Date): Signal {
 export interface SignalQuery {
   windowDays: number;
   minScore: number;
-  stage: "all" | "pre_permit" | "pre_issuance";
+  stage: "all" | "early" | "entitlement" | "pre_permit" | "pre_issuance";
   limit: number;
   /** Drop permits that already name a contractor. Default view for a GC. */
   openOnly: boolean;
@@ -119,10 +122,17 @@ export function rankSignals(permits: Permit[], now: Date, q: SignalQuery): Signa
     .map((p) => buildSignal(p, now))
     .filter((s) => (q.openOnly ? s.open : true))
     .filter((s) => s.score >= q.minScore)
-    .filter((s) =>
-      q.stage === "all" ||
-      (q.stage === "pre_permit" && s.stage === "pre_permit") ||
-      (q.stage === "pre_issuance" && s.stage !== "issued"));
+    .filter((s) => {
+      switch (q.stage) {
+        // "early" is the product's real default: everything ahead of a
+        // building permit being issued, where the window is months not days.
+        case "early": return s.stage === "entitlement" || s.stage === "pre_permit";
+        case "entitlement": return s.stage === "entitlement";
+        case "pre_permit": return s.stage === "pre_permit";
+        case "pre_issuance": return s.stage !== "issued";
+        default: return true;
+      }
+    });
 
   // Group by firm, keeping the highest-scoring permit as the one to lead with.
   const byFirm = new Map<string, Signal[]>();

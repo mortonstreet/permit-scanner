@@ -39,9 +39,12 @@ const WINDOWS = [
 ];
 
 const STAGES = [
-  { value: "all", label: "Any stage" },
+  // "Early" is the default a GC should live in: the measured window ahead of
+  // permit issuance is months, where after it is days.
+  { value: "early", label: "Early stage only" },
+  { value: "entitlement", label: "Entitlement only" },
   { value: "pre_issuance", label: "Not yet issued" },
-  { value: "pre_permit", label: "Pre-permit only" },
+  { value: "all", label: "Any stage" },
 ];
 
 /** States with live coverage today. Kept short so the demo never hits a dead one. */

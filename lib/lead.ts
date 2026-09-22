@@ -113,7 +113,7 @@ export function scoreLead(permit: Permit, now = new Date()): LeadScore {
 
   const daysOld = daysSincePosted(permit, now);
   const preIssuance = permit.issue_date == null && permit.final_date == null;
-  const prePermit = permit.source_id === "fl-fdep-erp" || permit.source_id === "fl-hillsborough-sitedev";
+  const prePermit = permit.stage === "pre_permit" || permit.stage === "entitlement";
   const competitor = competingContractor(permit);
   const open = competitor == null;
   const target = resolveTarget(permit);
@@ -142,13 +142,39 @@ export function scoreLead(permit: Permit, now = new Date()): LeadScore {
   else if (daysOld <= 14) score += 10;
   else if (daysOld <= 30) score += 4;
 
-  // ── stage, 0-15 ─────────────────────────────────────────────────────
-  if (prePermit) {
-    score += 15;
+  /*
+   * Stage, 0-22. This carries more weight than it looks.
+   *
+   * Measured windows: entitlement runs ~170 days from site plan submission to
+   * approval, while permit review is 28 days in Raleigh and 2 days in Orlando.
+   * An issued permit in a fast-permitting city is not a lead at all - the
+   * contractor was engaged before the permit existed.
+   */
+  if (permit.stage === "entitlement") {
+    score += 22;
+    reasons.push("Entitlement stage - months before a building permit");
+  } else if (permit.stage === "pre_permit") {
+    score += 18;
     reasons.push("Pre-permit filing - ahead of the building permit");
   } else if (preIssuance) {
     score += 10;
     reasons.push("Not yet issued - work has not started");
+  }
+
+  /*
+   * Staleness guard.
+   *
+   * Jurisdictions rarely close out abandoned applications: Raleigh has 952
+   * plans still marked in-review with a median age of eleven years. An old
+   * open record is a dead project, not a patient one, and it must not ride
+   * the stage bonus onto a call list.
+   */
+  if (daysOld != null && daysOld > 365 && preIssuance) {
+    score -= 25;
+    warnings.push(`Open for ${Math.floor(daysOld / 365)}y - likely abandoned, not pending`);
+  } else if (daysOld != null && daysOld > 180 && preIssuance) {
+    score -= 10;
+    warnings.push("Open more than 6 months with no movement");
   }
 
   // ── fit, 0-12 ───────────────────────────────────────────────────────
@@ -173,9 +199,13 @@ export function scoreLead(permit: Permit, now = new Date()): LeadScore {
   }
 
   // ── reachability bonus, capped ──────────────────────────────────────
+  if (permit.owner?.email || permit.contractor?.email) {
+    score += 8;
+    reasons.push("Direct email on the filing");
+  }
   if (permit.owner?.phone || permit.contractor?.phone) {
-    score += 4;
-    reasons.push("Phone on the permit");
+    score += 6;
+    reasons.push("Phone on the filing");
   }
   // A company is a far better enrichment target than a private individual.
   if (target?.isCompany) score += 3;

@@ -5,6 +5,7 @@ import { ArrowRight, Building2, Clock, MapPin, Phone, TriangleAlert, Zap } from 
 import { cn, formatUsd, humanizeTag } from "@/lib/utils";
 import { tagPalette } from "@/lib/reference-data";
 import type { Signal } from "@/lib/signal";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CopyButton } from "./copy-button";
 
 /**
@@ -41,9 +42,18 @@ const ROLE_STYLES: Record<string, string> = {
 };
 
 const STAGE_LABELS: Record<Signal["stage"], string> = {
+  entitlement: "Entitlement",
   pre_permit: "Pre-permit",
   pre_issuance: "Not yet issued",
   issued: "Issued",
+};
+
+/** How much runway the stage implies, from the measured windows. */
+const STAGE_HINTS: Record<Signal["stage"], string> = {
+  entitlement: "Site plan in review - typically months before a building permit",
+  pre_permit: "Filed ahead of the building permit",
+  pre_issuance: "Permit applied for, not yet issued",
+  issued: "Permit issued - the contractor is already engaged",
 };
 
 export function SignalCard({ signal, query }: { signal: Signal; query: string }) {
@@ -108,9 +118,17 @@ export function SignalCard({ signal, query }: { signal: Signal; query: string })
             <span className="flex items-center gap-1">
               <Clock className="size-3.5" aria-hidden /> {signal.posted}
             </span>
-            <span className="flex items-center gap-1">
-              <Zap className="size-3.5" aria-hidden /> {STAGE_LABELS[signal.stage]}
-            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={cn(
+                  "flex cursor-default items-center gap-1",
+                  signal.stage === "entitlement" && "font-semibold text-primary",
+                )}>
+                  <Zap className="size-3.5" aria-hidden /> {STAGE_LABELS[signal.stage]}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{STAGE_HINTS[signal.stage]}</TooltipContent>
+            </Tooltip>
             {signal.where.address && (
               <span className="flex min-w-0 items-center gap-1">
                 <MapPin className="size-3.5 shrink-0" aria-hidden />

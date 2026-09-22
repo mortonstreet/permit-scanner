@@ -8,6 +8,7 @@ function toRow(permit: Permit) {
   return {
     id: permit.id,
     source_id: permit.source_id,
+    stage: permit.stage,
     permit_number: permit.permit_number,
     status: permit.status,
     status_raw: permit.status_raw,
@@ -115,6 +116,7 @@ export function fromRow(row: Record<string, unknown>): Permit {
   return {
     id: String(row.id),
     source_id: String(row.source_id),
+    stage: (row.stage as Permit["stage"]) ?? "issued",
     permit_number: (row.permit_number as string) ?? null,
     status: (row.status as Permit["status"]) ?? "unknown",
     status_raw: (row.status_raw as string) ?? null,

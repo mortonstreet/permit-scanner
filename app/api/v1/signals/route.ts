@@ -22,7 +22,8 @@ export const maxDuration = 60;
  * Extra params beyond the standard filter vocabulary:
  *   window      days back to look (default 7, max 90)
  *   min_score   drop leads below this score (default 40)
- *   stage       all | pre_permit | pre_issuance   (default all)
+ *   stage       all | early | entitlement | pre_permit | pre_issuance (default all)
+ *               "early" means everything ahead of permit issuance
  *   open_only   exclude permits that already name a contractor (default true)
  */
 export async function GET(request: Request) {
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
     const scored = rankSignals(result.items, now, {
       windowDays: window,
       minScore,
-      stage: stage as "all" | "pre_permit" | "pre_issuance",
+      stage: stage as "all" | "early" | "entitlement" | "pre_permit" | "pre_issuance",
       limit,
       openOnly,
     });
