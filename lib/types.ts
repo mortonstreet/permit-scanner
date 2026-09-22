@@ -96,6 +96,14 @@ export interface Permit {
   /** The developer/property owner - the party we ultimately want to reach. */
   owner: PermitContact | null;
 
+  /**
+   * The jurisdiction explicitly stated no contractor is engaged yet - Phoenix
+   * writes "TO BE BID" in the professional-of-record field. This is stronger
+   * than a null: an absent column means the feed does not publish contractors,
+   * whereas this means the work is genuinely out to bid.
+   */
+  contractor_unassigned: boolean;
+
   property: PropertyInfo;
 
   /** Everything the source gave us that we did not map, for the "source fields" drawer. */

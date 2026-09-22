@@ -458,8 +458,8 @@ const austin = socrata({
     label: "Austin, TX",
     state: "TX", county: "Travis", city: "Austin", jurisdiction: "City of Austin",
     cadence: "daily",
-    capabilities: caps({ exactCount: false }),
-    notes: "Issued-permits dataset, so an applied-date window under-counts. Job value lives in a companion dataset.",
+    capabilities: caps({ contractor: true, owner: true, exactCount: false }),
+    notes: "Issued permits, so an applied-date window under-counts. Contractor ~92% filled; the applicant field is only ~20% and there is no owner.",
   },
   domain: "datahub.austintexas.gov",
   datasetId: "3syk-w9eu",
@@ -474,6 +474,13 @@ const austin = socrata({
     file_date: "applieddate",
     issue_date: "issue_date",
     property_type: "permit_class_mapped",
+    // These exist and are ~92% filled. An earlier mapping missed them because
+    // Socrata omits null keys from row JSON, so sampling a row with a null
+    // contractor makes the column look absent. Read /api/views/<id>.json.
+    contractor_company: "contractor_company_name",
+    contractor_name: "contractor_full_name",
+    contractor_phone: "contractor_phone",
+    owner_name: "applicant_full_name",
   },
   appTokenEnv: "SOCRATA_APP_TOKEN",
 });
@@ -617,6 +624,188 @@ const batonRouge = socrata({
   appTokenEnv: "SOCRATA_APP_TOKEN",
 });
 
+
+/**
+ * City of Phoenix planning permits.
+ *
+ * The standout source in the whole registry. `PROFESS_NAME` holds the
+ * professional of record, and on 1,987 open permits its literal value is
+ * "TO BE BID" - an explicit, machine-readable statement that the grading
+ * contractor has not been selected. Everywhere else we infer "no GC yet"
+ * from a null field; here the jurisdiction says it outright.
+ *
+ * Phoenix's CKAN portal publishes only aggregate counts, which is why this
+ * server is easy to miss. It is unlisted but public and needs no key.
+ */
+const phoenix = arcgis({
+  descriptor: {
+    id: "az-phoenix",
+    label: "Phoenix, AZ",
+    state: "AZ", county: "Maricopa", city: "Phoenix", jurisdiction: "City of Phoenix",
+    cadence: "daily",
+    capabilities: caps({ contractor: true }),
+    notes: "PROFESS_NAME = 'TO BE BID' marks an open permit with no contractor selected - the clearest pre-award signal in the registry.",
+  },
+  layerUrl: "https://maps.phoenix.gov/pub/rest/services/Public/Planning_Permit/MapServer/1",
+  timeoutMs: 90_000,
+  fields: {
+    permit_number: "PER_NUM",
+    address: "STREET_FULL_NAME",
+    description: "PERMIT_NAME",
+    permit_type: "SCOPE_DESC",
+    status: "PERMIT_STAT",
+    file_date: "PER_ENT_DATE",
+    issue_date: "PER_ISSUE_DATE",
+    contractor_company: "PROFESS_NAME",
+  },
+  maxRecordCount: 1000,
+});
+
+/**
+ * NYC Department of Buildings, DOB NOW job filings.
+ *
+ * The largest fresh feed in the registry and the only one where excavation is
+ * a native boolean rather than a keyword guess: `earth_work_work_type_` and
+ * `foundation_work_type_` are YES/NO columns. Owner first and last name are
+ * filled on essentially every 2026 filing.
+ *
+ * Two cautions. `owner_s_business_name` is roughly a third placeholder text
+ * ("Not Applicable", "PR", "N/A"), so the individual name fields are the
+ * reliable key. And this is DOB NOW, not the legacy BIS dataset, which stores
+ * its dates as text and is winding down.
+ */
+const nycDobNow = socrata({
+  descriptor: {
+    id: "ny-nyc-dobnow",
+    label: "New York City (DOB NOW)",
+    state: "NY", county: "New York", city: "New York", jurisdiction: "NYC Dept of Buildings",
+    cadence: "realtime",
+    capabilities: caps({ owner: true, contractor: true, jobValue: true, exactCount: false }),
+    notes: "Excavation and foundation are native YES/NO fields. Owner business name is ~36% placeholder text; the personal name fields are reliable.",
+  },
+  domain: "data.cityofnewyork.us",
+  datasetId: "w9ak-ipjd",
+  timeoutMs: 60_000,
+  fields: {
+    permit_number: "job_filing_number",
+    address_parts: { number: "house_no", street: "street_name" },
+    city: "borough",
+    description: "job_description",
+    permit_type: "job_type",
+    status: "filing_status",
+    job_value: "initial_cost",
+    file_date: "filing_date",
+    owner_name: "owner_s_business_name",
+    contractor_company: "applicant_business_name",
+    contractor_license: "applicant_license",
+  },
+  appTokenEnv: "SOCRATA_APP_TOKEN",
+});
+
+/**
+ * Raleigh development plans.
+ *
+ * The earliest signal in the registry: a plan is submitted months before any
+ * permit, and the file names a `developer` on 95.8% of rows with the site
+ * acreage attached.
+ *
+ * Worth knowing: `developer` frequently holds the civil engineer of record
+ * rather than the equity developer. For a site-work contractor that is
+ * arguably the better call anyway, since the civil engineer scopes the
+ * earthwork. Volume is low - roughly three a week.
+ */
+const raleighPlans = arcgis({
+  descriptor: {
+    id: "nc-raleigh-plans",
+    label: "Raleigh development plans, NC",
+    state: "NC", county: "Wake", city: "Raleigh", jurisdiction: "City of Raleigh",
+    cadence: "weekly",
+    capabilities: caps({ owner: true, latLng: true }),
+    notes: "Pre-application. Names a developer with acreage months before a permit; often the civil engineer of record.",
+  },
+  layerUrl: "https://services.arcgis.com/v400IkDOw1ad7Yad/arcgis/rest/services/Development_Plans/FeatureServer/0",
+  fields: {
+    permit_number: "plan_number",
+    description: "plan_name",
+    permit_type: "plan_type",
+    status: "status",
+    file_date: "submitted",
+    owner_company: "developer",
+    units: "units_req",
+  },
+  maxRecordCount: 1000,
+});
+
+/**
+ * Raleigh building permits still under review.
+ *
+ * Structurally the lead we want: 38% of these name no contractor yet, so the
+ * trade package is open, and the parcel owner is named on 93% of rows.
+ */
+const raleighPending = arcgis({
+  descriptor: {
+    id: "nc-raleigh-pending",
+    label: "Raleigh permits under review, NC",
+    state: "NC", county: "Wake", city: "Raleigh", jurisdiction: "City of Raleigh",
+    cadence: "daily",
+    capabilities: caps({ owner: true, contractor: true, jobValue: true, latLng: true }),
+    notes: "Pre-issuance only. Around 38% name no contractor yet, which is exactly the open trade package.",
+  },
+  layerUrl: "https://services.arcgis.com/v400IkDOw1ad7Yad/arcgis/rest/services/Building_Permits_Pending/FeatureServer/0",
+  fields: {
+    permit_number: "permitnum",
+    address: "originaladdress1",
+    city: "originalcity",
+    zipcode: "originalzip",
+    description: "proposedworkdescription",
+    permit_type: "permitclass",
+    status: "statuscurrent",
+    job_value: "estprojectcost",
+    file_date: "applieddate",
+    issue_date: "issueddate",
+    owner_name: "parcelownername",
+    contractor_company: "contractorcompanyname",
+    contractor_license: "contractorlicnum",
+    contractor_phone: "contractorphone",
+  },
+  maxRecordCount: 1000,
+});
+
+/**
+ * Mecklenburg County (Charlotte) Accela extract.
+ *
+ * Owner named on 94% of rows and no contractor field at all, which makes every
+ * row structurally a leading indicator. Contact fields exist but are populated
+ * on a few hundred rows out of 215k, so treat them as absent.
+ */
+const mecklenburg = arcgis({
+  descriptor: {
+    id: "nc-mecklenburg",
+    label: "Mecklenburg County (Charlotte), NC",
+    state: "NC", county: "Mecklenburg", jurisdiction: "Mecklenburg County",
+    cadence: "realtime",
+    capabilities: caps({ owner: true, jobValue: true, latLng: true }),
+    notes: "Owner-side only, 94% named, no contractor field. Owner phone and email exist but are filled on ~0.1% of rows.",
+  },
+  layerUrl: "https://meckgis.mecklenburgcountync.gov/server/rest/services/AccelaAllPermits/FeatureServer/0",
+  fields: {
+    permit_number: "permit_number",
+    address: "project_address",
+    city: "owner_city",
+    zipcode: "zip_code",
+    description: "description_of_work",
+    permit_type: "permit_type",
+    status: "permit_status",
+    job_value: "building_construction_cost_customer",
+    issue_date: "issue_date",
+    final_date: "completion_date",
+    owner_name: "owner_name",
+    building_area: "total_square_feet",
+    units: "number_of_units",
+  },
+  maxRecordCount: 1000,
+});
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Archival - kept, and flagged, so nothing reads as a live lead
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -674,6 +863,8 @@ export const ALL_SOURCES: SourceAdapter[] = [
   manatee, volusia, osceolaCommercial, osceolaResidential, alachua, charlotte, cityOfMiami,
   // Texas
   fortWorth, sanAntonio, austin, collinCad,
+  // Highest-intent pre-award signals
+  phoenix, nycDobNow, raleighPlans, raleighPending, mecklenburg,
   // Other metros
   losAngeles, chicago, cincinnati, batonRouge,
   // Archival

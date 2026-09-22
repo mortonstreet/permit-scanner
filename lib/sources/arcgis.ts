@@ -1,6 +1,7 @@
 import type { SearchFilters } from "../filters";
 import { buildPermit, inferTags, normalizePropertyType, normalizeStatus, parseDate, parseLatLng, parseMoney, titleCase } from "../normalize";
 import { isOrganization, normalizePersonName, titleizeOrg } from "../names";
+import { normalizePartyName } from "../normalize";
 import type { Permit } from "../types";
 import { type FetchArgs, type FetchResult, type SourceAdapter, type SourceDescriptor, fetchJson } from "./types";
 
@@ -29,6 +30,7 @@ export interface ArcGisFieldMap {
   contractor_name?: string;
   contractor_company?: string;
   contractor_license?: string;
+  contractor_phone?: string;
   owner_name?: string;
   owner_company?: string;
   /** Some feeds split the applicant across two columns (Manatee, Accela). */
@@ -50,6 +52,8 @@ export interface ArcGisConfig {
   baseWhere?: string;
   /** ArcGIS caps page size per service; 1000 or 2000 are typical. */
   maxRecordCount?: number;
+  /** Override when a server is unusually slow. Defaults to 45s. */
+  timeoutMs?: number;
   /**
    * Some services store dates as plain strings rather than esriFieldTypeDate
    * (Manatee's APPLYDATE, St. Johns' IssueDate). `DATE '...'` and INTERVAL
@@ -137,7 +141,9 @@ export function createArcGisAdapter(config: ArcGisConfig): SourceAdapter {
     const description = str(a, fields.description);
     const permitType = str(a, fields.permit_type);
     const statusRaw = str(a, fields.status);
-    const contractorCompany = str(a, fields.contractor_company);
+    // "TO BE BID" and friends mean no contractor, not a contractor called that.
+    const contractorParty = normalizePartyName(str(a, fields.contractor_company));
+    const contractorCompany = contractorParty.name;
     // Prefer split columns when the feed has them; they are unambiguous.
     const contractorName = normalizePersonName({
       first: str(a, fields.contractor_first_name),
@@ -182,7 +188,8 @@ export function createArcGisAdapter(config: ArcGisConfig): SourceAdapter {
         company: contractorCompany ? titleizeOrg(contractorCompany)
           : contractorName && isOrganization(contractorName) ? contractorName : null,
         license: str(a, fields.contractor_license),
-        phone: null, email: null, address: null,
+        phone: str(a, fields.contractor_phone),
+        email: null, address: null,
       } : null,
       // Prefer the filing company; fall back to the individual applicant, since
       // many filings are made by an owner-operator under their own name.
@@ -201,6 +208,7 @@ export function createArcGisAdapter(config: ArcGisConfig): SourceAdapter {
         year_built: num(a, fields.year_built),
         market_value: null,
       },
+      contractor_unassigned: contractorParty.placeholder != null,
       source_fields: a,
     });
   }
@@ -208,7 +216,9 @@ export function createArcGisAdapter(config: ArcGisConfig): SourceAdapter {
   async function query(params: Record<string, string>, signal?: AbortSignal): Promise<ArcGisResponse> {
     const search = new URLSearchParams({ f: "json", ...params });
     const res = await fetchJson<ArcGisResponse>(`${queryUrl}?${search}`, {
-      sourceId: descriptor.id, signal, timeoutMs: 25_000,
+      // Some on-prem servers (Phoenix) are slow on a cold cache; a short
+      // timeout drops an otherwise healthy source.
+      sourceId: descriptor.id, signal, timeoutMs: config.timeoutMs ?? 45_000,
     });
     // ArcGIS reports failures with HTTP 200 and an `error` body.
     if (res.error) {

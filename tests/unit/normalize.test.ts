@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   inferTags, normalizePropertyType, normalizeStatus, parseDate,
-  parseLatLng, parseMoney, permitId, titleCase,
+  normalizePartyName, parseLatLng, parseMoney, permitId, titleCase,
 } from "@/lib/normalize";
 
 describe("normalizeStatus", () => {
@@ -110,5 +110,33 @@ describe("normalizePropertyType", () => {
 
   it("returns null when nothing matches", () => {
     expect(normalizePropertyType("???")).toBeNull();
+  });
+});
+
+describe("normalizePartyName", () => {
+  it("treats 'TO BE BID' as no contractor, not a contractor named that", () => {
+    // Phoenix writes this literally to mean the grading contractor has not
+    // been selected. Reading it as a name would invert the whole signal.
+    const r = normalizePartyName("TO BE BID");
+    expect(r.name).toBeNull();
+    expect(r.placeholder).toBe("TO BE BID");
+  });
+
+  it("catches the other placeholder spellings jurisdictions use", () => {
+    for (const v of ["TBD", "N/A", "NONE", "To Be Determined", "UNKNOWN", "---", "Owner Builder", "SAME AS OWNER"]) {
+      expect(normalizePartyName(v).name, `${v} should be treated as absent`).toBeNull();
+    }
+  });
+
+  it("leaves real firm names alone", () => {
+    expect(normalizePartyName("Talbot Custom Homes LLC").name).toBe("Talbot Custom Homes LLC");
+    expect(normalizePartyName("DRB Group Florida LLC").placeholder).toBeNull();
+    // A real firm whose name merely contains a placeholder word must survive.
+    expect(normalizePartyName("Owner Builder Supply Co").name).toBe("Owner Builder Supply Co");
+  });
+
+  it("handles empty input without inventing a placeholder", () => {
+    expect(normalizePartyName(null)).toEqual({ name: null, placeholder: null });
+    expect(normalizePartyName("   ")).toEqual({ name: null, placeholder: null });
   });
 });

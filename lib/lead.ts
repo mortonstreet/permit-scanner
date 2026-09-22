@@ -119,7 +119,12 @@ export function scoreLead(permit: Permit, now = new Date()): LeadScore {
   const target = resolveTarget(permit);
 
   // ── openness: the single most important signal, 0-35 ────────────────
-  if (open && target) {
+  if (permit.contractor_unassigned) {
+    // The jurisdiction said it outright rather than us inferring it from a
+    // null, so this outranks a merely-absent contractor.
+    score += 38;
+    reasons.push("Out to bid - contractor not selected");
+  } else if (open && target) {
     score += 35;
     reasons.push("No contractor of record yet");
   } else if (competitor) {
@@ -175,6 +180,7 @@ export function scoreLead(permit: Permit, now = new Date()): LeadScore {
   // A company is a far better enrichment target than a private individual.
   if (target?.isCompany) score += 3;
   else if (target) warnings.push("Applicant is an individual, not a company");
+  else if (permit.contractor_unassigned) warnings.push("No party named - the permit record is the only lead");
 
   return {
     score: Math.min(Math.round(score), 100),
@@ -188,10 +194,19 @@ export function scoreBand(score: number): "hot" | "warm" | "cool" {
   return "cool";
 }
 
-/** A permit belongs on the list only if there is biddable work and a party to call. */
+/**
+ * A permit belongs on the list if there is biddable work and either somebody
+ * to call or an explicit statement that the work is out to bid.
+ *
+ * The second case matters: Phoenix names no owner but writes "TO BE BID" on
+ * open grading permits. There is no contact, but the job, the address and the
+ * scope are all known and the trade package is provably unlet - which is a
+ * better lead than a named party on a job somebody already won.
+ */
 export function isActionableForGc(permit: Permit): boolean {
   const hasWork = permit.tags.some((t) => SITEWORK_TAGS.has(t));
-  return hasWork && resolveTarget(permit) != null;
+  if (!hasWork) return false;
+  return resolveTarget(permit) != null || permit.contractor_unassigned;
 }
 
 /** Only jobs nobody has won yet. The default view for a GC hunting work. */

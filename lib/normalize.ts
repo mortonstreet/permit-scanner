@@ -129,6 +129,39 @@ export function titleCase(raw: string | null | undefined): string | null {
     .join(" ");
 }
 
+/**
+ * Placeholder values jurisdictions write where a party is not yet known.
+ *
+ * Phoenix literally writes "TO BE BID" in the professional-of-record field to
+ * mean the contractor has not been selected - which is the strongest
+ * pre-award signal we have. Treating it as a contractor name would invert its
+ * meaning and mark the job as already placed.
+ */
+const PARTY_PLACEHOLDERS = [
+  /^to\s*be\s*(bid|determined|selected|assigned|hired|announced)$/i,
+  /^(tbd|tba|t\.b\.d\.?|n\/?a|none|unknown|not\s*applicable|pending|owner)$/i,
+  /^(self|homeowner|owner\s*builder|owner[-\s]*occupant)$/i,
+  /^(no\s*contractor|contractor\s*unknown|same\s*as\s*owner)$/i,
+  /^[-.\s*]+$/,
+];
+
+/**
+ * Null out a party name that is really a placeholder.
+ *
+ * Returns the reason when it strips one, so a caller can record that the
+ * absence was explicit rather than merely missing - "the jurisdiction says no
+ * contractor yet" is a stronger signal than "this feed has no such column".
+ */
+export function normalizePartyName(raw: string | null | undefined): { name: string | null; placeholder: string | null } {
+  if (!raw) return { name: null, placeholder: null };
+  const trimmed = String(raw).trim();
+  if (!trimmed) return { name: null, placeholder: null };
+  if (PARTY_PLACEHOLDERS.some((re) => re.test(trimmed))) {
+    return { name: null, placeholder: trimmed.toUpperCase() };
+  }
+  return { name: trimmed, placeholder: null };
+}
+
 /** Deterministic id so re-ingesting the same record updates instead of duplicating. */
 export function permitId(sourceId: string, permitNumber: string | null, address: string | null): string {
   const basis = `${sourceId}:${(permitNumber ?? "").toUpperCase()}:${(address ?? "").toUpperCase()}`;
@@ -170,6 +203,7 @@ export function buildPermit(input: Partial<Permit> & Pick<Permit, "source_id">):
     final_date: input.final_date ?? null,
     contractor: input.contractor ?? null,
     owner: input.owner ?? null,
+    contractor_unassigned: input.contractor_unassigned ?? false,
     property: input.property ?? {
       property_type: null, lot_size_sqft: null, building_area_sqft: null,
       stories: null, units: null, year_built: null, market_value: null,

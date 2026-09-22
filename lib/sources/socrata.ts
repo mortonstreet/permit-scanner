@@ -1,6 +1,7 @@
 import type { SearchFilters } from "../filters";
 import { buildPermit, inferTags, normalizePropertyType, normalizeStatus, parseDate, parseLatLng, parseMoney, titleCase } from "../normalize";
 import { isOrganization, normalizePersonName, titleizeOrg } from "../names";
+import { normalizePartyName } from "../normalize";
 import type { Permit } from "../types";
 import { type FetchArgs, type FetchResult, type SourceAdapter, type SourceDescriptor, fetchJson } from "./types";
 
@@ -55,6 +56,8 @@ export interface SocrataConfig {
   baseWhere?: string;
   /** App token lifts the anonymous rate limit. Read from env at call time. */
   appTokenEnv?: string;
+  /** Override when a dataset is large enough that aggregates are slow. */
+  timeoutMs?: number;
 }
 
 type SocrataRow = Record<string, unknown>;
@@ -149,7 +152,9 @@ export function createSocrataAdapter(config: SocrataConfig): SourceAdapter {
       if (loc?.coordinates) { lng = loc.coordinates[0]; lat = loc.coordinates[1]; }
     }
 
-    const contractorCompany = str(row, fields.contractor_company);
+    // "TO BE BID" and friends mean no contractor, not a contractor called that.
+    const contractorParty = normalizePartyName(str(row, fields.contractor_company));
+    const contractorCompany = contractorParty.name;
     const contractorName = normalizePersonName({ full: str(row, fields.contractor_name) });
     const ownerName = normalizePersonName({ full: str(row, fields.owner_name) });
 
@@ -199,6 +204,7 @@ export function createSocrataAdapter(config: SocrataConfig): SourceAdapter {
         year_built: num(row, fields.year_built),
         market_value: null,
       },
+      contractor_unassigned: contractorParty.placeholder != null,
       source_fields: row,
     });
   }
@@ -235,6 +241,7 @@ export function createSocrataAdapter(config: SocrataConfig): SourceAdapter {
 
       const rows = await fetchJson<SocrataRow[]>(`${endpoint}?${params}`, {
         sourceId: descriptor.id, signal, headers: headers(),
+        timeoutMs: config.timeoutMs ?? 30_000,
       });
 
       return { permits: rows.map(mapRow), warnings };
@@ -259,7 +266,8 @@ export function createSocrataAdapter(config: SocrataConfig): SourceAdapter {
         if (dateCol) {
           const agg = await fetchJson<Array<Record<string, string>>>(
             `${endpoint}?${new URLSearchParams({ $select: `max(${dateCol}) as newest, count(*) as n` })}`,
-            { sourceId: descriptor.id, timeoutMs: 20_000, headers: headers() },
+            // A count over a million-row table is slow on a cold cache.
+            { sourceId: descriptor.id, timeoutMs: config.timeoutMs ?? 45_000, headers: headers() },
           );
           const newest = agg[0]?.newest?.slice(0, 10);
           const count = agg[0]?.n;

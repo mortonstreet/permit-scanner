@@ -30,6 +30,7 @@ function toRow(permit: Permit) {
     final_date: permit.final_date,
     contractor: permit.contractor,
     owner: permit.owner,
+    contractor_unassigned: permit.contractor_unassigned,
     property: permit.property,
     source_fields: permit.source_fields,
   };
@@ -138,6 +139,7 @@ export function fromRow(row: Record<string, unknown>): Permit {
     final_date: (row.final_date as string) ?? null,
     contractor: (row.contractor as Permit["contractor"]) ?? null,
     owner: (row.owner as Permit["owner"]) ?? null,
+    contractor_unassigned: Boolean(row.contractor_unassigned),
     property: (row.property as Permit["property"]) ?? {
       property_type: null, lot_size_sqft: null, building_area_sqft: null,
       stories: null, units: null, year_built: null, market_value: null,
