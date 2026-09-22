@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { DatabaseSync } from "node:sqlite";
-import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { homedir } from "node:os";
 import path from "node:path";

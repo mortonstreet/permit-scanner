@@ -1,7 +1,7 @@
 import "server-only";
 import { lookupFirm, type DbprMatch } from "./gov/fl-dbpr";
 import { lookupOrlandoBtr } from "./gov/orlando-btr";
-import { entityDbAvailable, resolveEntity, type EntityMatch } from "./gov/sunbiz";
+import { entityDbAvailable, resolveEntity } from "./gov/sunbiz";
 import { isOrganization, titleizeOrg, titleizePerson } from "../names";
 
 /**
