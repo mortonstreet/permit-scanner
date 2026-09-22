@@ -88,6 +88,13 @@ export interface ResolveOptions {
   state?: string | null;
   /** Licence number from the permit, the highest-precision join available. */
   licenseNumber?: string | null;
+  /**
+   * Skip sources that need a network round trip. SunBiz and DBPR are local
+   * (SQLite and an in-memory index), so a local-only resolve is sub-millisecond
+   * and can run inline for every row of a result list. Orlando's tax receipts
+   * are an HTTP call and are left for on-demand resolution.
+   */
+  localOnly?: boolean;
 }
 
 export async function resolveEntityFully(
@@ -108,11 +115,13 @@ export async function resolveEntityFully(
   }
 
   // ── all three in parallel; they are independent ──────────────────────
-  sourcesChecked.push("sunbiz", "fl-dbpr", "orlando-btr");
+  sourcesChecked.push("sunbiz", "fl-dbpr");
+  if (!opts.localOnly) sourcesChecked.push("orlando-btr");
+
   const [sunbiz, dbpr, btr] = await Promise.all([
     Promise.resolve().then(() => (entityDbAvailable() ? resolveEntity(companyName, { city: opts.city }) : null)),
     lookupFirm(companyName, opts.licenseNumber).catch(() => null),
-    lookupOrlandoBtr(companyName).catch(() => null),
+    opts.localOnly ? Promise.resolve(null) : lookupOrlandoBtr(companyName).catch(() => null),
   ]);
 
   if (!entityDbAvailable()) {

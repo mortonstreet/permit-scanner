@@ -3,7 +3,7 @@ import { authorize, fail, isFirstParty, ok } from "@/lib/api/respond";
 import { parseFilters } from "@/lib/filters";
 import { rankSignals } from "@/lib/signal";
 import { buildDigest, type DigestRecipient } from "@/lib/notify/digest";
-import { emailConfigured, sendDigest } from "@/lib/notify/resend";
+import { emailConfigured, sendDigestBatch } from "@/lib/notify/resend";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -59,6 +59,9 @@ export async function POST(request: Request) {
   const c = getContainer();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
   const results: Array<Record<string, unknown>> = [];
+  // Collected first, then sent as batches: Resend allows 10 requests/second
+  // per team, so a per-recipient loop trips the limit on any real list.
+  const outbox: Array<{ recipient: DigestRecipient; content: ReturnType<typeof buildDigest> }> = [];
 
   // Sequential rather than parallel: one query per territory, and Resend's
   // rate limit is low enough that fanning out buys nothing.
@@ -101,11 +104,17 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const send = await sendDigest(recipient, content);
-      results.push({ ...send, signals: signals.length, subject: content.subject });
+      outbox.push({ recipient, content });
     } catch (err) {
       results.push({ to: recipient.email, sent: false, error: err instanceof Error ? err.message : "failed" });
     }
+  }
+
+  if (outbox.length > 0) {
+    const sent = await sendDigestBatch(outbox);
+    sent.forEach((r, i) => {
+      results.push({ ...r, signals: outbox[i].content.text.split("\n[").length - 1, subject: outbox[i].content.subject });
+    });
   }
 
   return ok(results, {

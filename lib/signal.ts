@@ -37,6 +37,22 @@ export interface Signal {
   };
   permit_number: string | null;
   source: string;
+  /**
+   * Contact resolved from public records, attached inline when the caller
+   * asks for it. Only the local sources run inline, so this costs no network
+   * round trip and no credits.
+   */
+  resolved?: {
+    person: string;
+    title: string | null;
+    phone: string | null;
+    email: string | null;
+    entity: string | null;
+    entity_status: string | null;
+    license: string | null;
+    confidence: number;
+    sources: string[];
+  } | null;
 }
 
 export function buildSignal(permit: Permit, now: Date): Signal {
