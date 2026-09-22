@@ -14,6 +14,7 @@ import { PermitTimeline } from "./permit-timeline";
 import { SourceFields } from "./source-fields";
 import { CopyButton } from "./copy-button";
 import { LeadPanel } from "./lead-panel";
+import { EntityPanel } from "./entity-panel";
 
 /** Full-page permit record: the drill-down from "View full detail". */
 export function PermitProfile({ permitId }: { permitId: string }) {
@@ -135,6 +136,8 @@ export function PermitProfile({ permitId }: { permitId: string }) {
         </div>
 
         <LeadPanel permit={permit} />
+
+        <EntityPanel permit={permit} />
 
         <SourceFields fields={permit.source_fields} />
 
