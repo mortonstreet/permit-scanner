@@ -74,7 +74,14 @@ export function buildDigest(
     const t = s.target;
     const addr = [s.where.address, s.where.city].filter(Boolean).join(", ") || s.where.jurisdiction || "";
     const link = `${opts.appUrl}/detail/permit-profile/${s.permit_id}?geo_state=${s.where.state ?? recipient.state}`;
-    const extra = s.also_filed?.length ? ` <span style="color:#6b695c">(+${s.also_filed.length} more permits)</span>` : "";
+    // A developer filing several permits is one call with a stronger opening,
+    // so show the combined value rather than only the count.
+    const alsoCount = s.also_filed?.length ?? 0;
+    const alsoValue = (s.also_filed ?? []).reduce((sum, f) => sum + (f.value ?? 0), 0) + (s.job.value ?? 0);
+    const extra = alsoCount > 0
+      ? ` <span style="color:#6b695c;font-weight:400">+${alsoCount} more permit${alsoCount === 1 ? "" : "s"}${
+          alsoValue > 0 ? `, ${money(alsoValue)} combined` : ""}</span>`
+      : "";
 
     return `
     <tr>
