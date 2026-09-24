@@ -21,6 +21,7 @@ function signal(overrides: Partial<Signal> = {}): Signal {
       jurisdiction: "Manatee County", latitude: null, longitude: null,
     },
     permit_number: "BLD2609-2170", source: "fl-manatee",
+    work_class: "horizontal", work_class_basis: "test", acreage: 2.5,
     ...overrides,
   };
 }

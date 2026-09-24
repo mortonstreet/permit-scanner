@@ -2,6 +2,7 @@ import { getContainer } from "@/lib/container";
 import { authorize, fail, isFirstParty, ok } from "@/lib/api/respond";
 import { parseFilters, type SearchFilters } from "@/lib/filters";
 import { isActionableForGc, isOpenOpportunity } from "@/lib/lead";
+import { isDeveloperLet } from "@/lib/workclass";
 import { rankSignals } from "@/lib/signal";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,8 @@ export const maxDuration = 60;
  *   min_score   drop leads below this score (default 40)
  *   stage       all | early | entitlement | pre_permit | pre_issuance (default all)
  *               "early" means everything ahead of permit issuance
- *   open_only   exclude permits that already name a contractor (default true)
+ *   open_only     exclude permits that already name a contractor (default true)
+ *   developer_let keep only horizontal work the developer lets directly (default true)
  */
 export async function GET(request: Request) {
   const auth = authorize(request);
@@ -39,6 +41,8 @@ export async function GET(request: Request) {
   // Default to open jobs only: a permit that already names a contractor is a
   // lagging indicator, and selling it to a GC wastes their call.
   const openOnly = (params.get("open_only") ?? "true") !== "false";
+  // Default on: a developer contact only converts on work the developer lets.
+  const developerLetOnly = (params.get("developer_let") ?? "true") !== "false";
   const limit = clamp(Number.parseInt(params.get("limit") ?? "50", 10) || 50, 1, 200);
 
   // Default the date range from `window` unless the caller set one explicitly.
@@ -68,6 +72,7 @@ export async function GET(request: Request) {
       stage: stage as "all" | "early" | "entitlement" | "pre_permit" | "pre_issuance",
       limit,
       openOnly,
+      developerLetOnly,
     });
 
     const signals = scored.slice(0, limit);
@@ -77,6 +82,7 @@ export async function GET(request: Request) {
       min_score: minScore,
       stage,
       open_only: openOnly,
+      developer_let_only: developerLetOnly,
       scanned: result.items.length,
       actionable: scored.length,
       returned: signals.length,
@@ -85,6 +91,7 @@ export async function GET(request: Request) {
         permits_scanned: result.items.length,
         gc_actionable: result.items.filter(isActionableForGc).length,
         open_jobs: result.items.filter(isOpenOpportunity).length,
+        developer_let: result.items.filter(isDeveloperLet).length,
         above_min_score: scored.length,
       },
       sources: result.sources.filter((s) => !s.archival).map((s) => s.label),

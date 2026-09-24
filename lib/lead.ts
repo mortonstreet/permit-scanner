@@ -1,4 +1,5 @@
 import { isOrganization } from "./names";
+import { classifyWork } from "./workclass";
 import { daysSincePosted, type Permit } from "./types";
 
 /**
@@ -175,6 +176,23 @@ export function scoreLead(permit: Permit, now = new Date()): LeadScore {
   } else if (daysOld != null && daysOld > 180 && preIssuance) {
     score -= 10;
     warnings.push("Open more than 6 months with no movement");
+  }
+
+  /*
+   * Who can actually award this, 0-15.
+   *
+   * On horizontal work the developer signs the sitework contract directly.
+   * On vertical work the GC lets that package, and subcontract terms commonly
+   * bar the sub from contacting the owner - so a developer contact is not
+   * just useless there, it is a relationship risk for the buyer.
+   */
+  const work = classifyWork(permit);
+  if (work.workClass === "horizontal") {
+    score += 15;
+    reasons.push("Developer-let sitework - no GC between you and the buyer");
+  } else if (work.workClass === "vertical") {
+    score -= 12;
+    warnings.push("Vertical build - the GC lets the sitework package, not the owner");
   }
 
   // ── fit, 0-12 ───────────────────────────────────────────────────────

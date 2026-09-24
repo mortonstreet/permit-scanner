@@ -1,4 +1,6 @@
 import { competingContractor, isActionableForGc, resolveTarget, scoreBand, scoreLead } from "./lead";
+import { classifyWork, readAcreage, type WorkClass } from "./workclass";
+import { haulFit, type HaulBase, type HaulFit } from "./geo";
 import { freshnessLabel } from "./sources/aggregate";
 import type { Permit } from "./types";
 
@@ -39,6 +41,21 @@ export interface Signal {
   permit_number: string | null;
   source: string;
   /**
+   * Horizontal work is let by the developer directly; vertical work is let by
+   * a GC who has usually already been chosen. Only the first is a lead a
+   * developer contact can actually convert.
+   */
+  work_class: WorkClass;
+  work_class_basis: string;
+  /** Site acreage where the filing reports it - the horizontal size proxy. */
+  acreage: number | null;
+  /**
+   * Distance from the contractor's yard. Named by buyers as the first thing
+   * that disqualifies a lead - a job two hours out is not commercially
+   * equivalent to one down the road once you are moving heavy equipment.
+   */
+  haul: HaulFit | null;
+  /**
    * Contact resolved from public records, attached inline when the caller
    * asks for it. Only the local sources run inline, so this costs no network
    * round trip and no credits.
@@ -56,9 +73,10 @@ export interface Signal {
   } | null;
 }
 
-export function buildSignal(permit: Permit, now: Date): Signal {
+export function buildSignal(permit: Permit, now: Date, base?: HaulBase | null): Signal {
   const s = scoreLead(permit, now);
   const target = resolveTarget(permit);
+  const work = classifyWork(permit);
 
   return {
     permit_id: permit.id,
@@ -97,6 +115,10 @@ export function buildSignal(permit: Permit, now: Date): Signal {
     },
     permit_number: permit.permit_number,
     source: permit.source_id,
+    work_class: work.workClass,
+    work_class_basis: work.basis,
+    acreage: readAcreage(permit),
+    haul: base ? haulFit(base, { lat: permit.latitude, lng: permit.longitude }) : null,
   };
 }
 
@@ -107,6 +129,14 @@ export interface SignalQuery {
   limit: number;
   /** Drop permits that already name a contractor. Default view for a GC. */
   openOnly: boolean;
+  /**
+   * Keep only work the developer lets directly. On vertical work the GC
+   * chooses the sitework sub and standard subcontract terms bar the sub from
+   * approaching the owner, so a developer contact there is unusable.
+   */
+  developerLetOnly?: boolean;
+  /** The contractor's yard. Leads outside the radius are dropped. */
+  base?: HaulBase | null;
 }
 
 /**
@@ -119,8 +149,13 @@ export interface SignalQuery {
 export function rankSignals(permits: Permit[], now: Date, q: SignalQuery): Signal[] {
   const scored = permits
     .filter(isActionableForGc)
-    .map((p) => buildSignal(p, now))
+    .map((p) => buildSignal(p, now, q.base))
     .filter((s) => (q.openOnly ? s.open : true))
+    .filter((s) => (q.developerLetOnly ? s.work_class === "horizontal" : true))
+    // A lead outside the haul radius is not a lead. Records with no
+    // coordinates are kept rather than silently dropped - we cannot prove
+    // they are far away.
+    .filter((s) => (q.base && s.haul ? s.haul.withinRadius : true))
     .filter((s) => s.score >= q.minScore)
     .filter((s) => {
       switch (q.stage) {
@@ -141,6 +176,12 @@ export function rankSignals(permits: Permit[], now: Date, q: SignalQuery): Signa
     const bucket = byFirm.get(key);
     if (bucket) bucket.push(s);
     else byFirm.set(key, [s]);
+  }
+
+  // Closer work outranks equal work further out, but only mildly: distance
+  // is a gate, and past the gate the job still has to be worth bidding.
+  for (const s of scored) {
+    if (s.haul) s.score = Math.min(100, s.score + Math.round(s.haul.proximity * 8));
   }
 
   const clustered: Signal[] = [];
